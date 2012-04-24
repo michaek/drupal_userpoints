@@ -1,0 +1,7 @@
+; $Id
+name = Userpoints decimal support
+description = Provides support for decimal values in Userpoints
+dependencies[] = userpoints 
+package = Userpoints
+core = 7.x
+

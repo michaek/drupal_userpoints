@@ -1,0 +1,99 @@
+<?php 
+
+/**
+ * Provide settings for the shared Userpoints administration settings form.
+ *
+ * @return
+ *   A form structure consisting of one or multiple vertical_tabs belonging to
+ *   the #group settings_additional.
+ */
+function userpoints_decimal_userpoints_settings() {
+  $form['decimal'] = array(
+    '#type'        => 'fieldset',
+    '#collapsible' => TRUE,
+    '#collapsed'   => TRUE,
+    '#group'       => 'settings_additional',
+    '#title'       => t('Decimals'),
+  );
+  $form['decimal']['userpoints_decimal_places'] = array(
+    '#type'          => 'select',
+    '#title'         => t('Decimal places'),
+    '#default_value' => variable_get('userpoints_decimal_places', 0),
+    '#options'       => array(0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8),
+    '#description'   => t('Set the number of decimal places that will be used.'),
+  );
+  $form['decimal']['userpoints_decimal_point'] = array(
+    '#type'          => 'textfield',
+    '#size'          => 1,
+    '#title'         => t('Decimal point'),
+    '#default_value' => variable_get('userpoints_decimal_point', '.'),
+    '#description'   => t('Set the decimal point that will be used.'),
+  );
+  $form['decimal']['userpoints_thousands_separator'] = array(
+    '#type'          => 'textfield',
+    '#size'          => 1,
+    '#title'         => t('Thousands separator'),
+    '#default_value' => variable_get('userpoints_thousands_separator', ','),
+    '#description'   => t('Set the thousands separator that will be used.'),
+  );
+
+  return $form;
+}
+
+/**
+ * Implementats hook_preprocess().
+ */
+function userpoints_decimal_preprocess_userpoints_points(&$variables) {
+  if ($places = variable_get('userpoints_decimal_places', 0)) {
+    $thousands = variable_get('userpoints_thousands_separator', ',');
+    $decimal = variable_get('userpoints_decimal_point', '.');
+    // Since we're not doing calculations with this value, it's safe to use math.
+    $points = $variables['points'] / pow(10, $places);
+    // Use PHP's number_format function to output our altered points.
+    $variables['points'] = number_format($points, $places, $decimal, $thousands);
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function userpoints_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'userpoints_admin_txn') {
+    // Update the form field to display a themed value.
+    // This strips tags, but other formatting could cause problems!
+    if ($form['points']['#default_value']) {
+      if ($points = $form['points']['#default_value']) {
+        $points = theme('userpoints_points', array('points' => $points));
+        $form['points']['#default_value'] = strip_tags($points);
+      }
+    }
+    // Add an extra validation function to restore the internal points.
+    array_unshift($form['#validate'], 'userpoints_decimal_admin_txn_validate');
+  }
+}
+
+/**
+ * Additional validation callback for userpoints_admin_txn.
+ *
+ * Restores the internal points value 
+ */
+function userpoints_decimal_admin_txn_validate($form, &$form_state) {
+  $places = variable_get('userpoints_decimal_places', 0);
+  if ($places && $form_state['values']['points']) {
+    $thousands = variable_get('userpoints_thousands_separator', ',');
+    $decimal = variable_get('userpoints_decimal_point', '.');
+    $parts = explode($decimal, $form_state['values']['points']);
+
+    $before = str_replace($thousands, '', $parts[0]);
+    $after = str_repeat(0, $places);
+    if (count($parts) > 1) {
+      // Trimming the string is essentially a "floor" operation.
+      // This only happens if a user enters more digits than are supported, which
+      // seems fine to me. If we want to be more clever about rounding, well,
+      // I suppose we can...
+      $after = substr($parts[1].$after, 0, $places);
+    }
+
+    $form_state['values']['points'] = $before.$after;
+  }
+}
